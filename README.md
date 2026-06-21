@@ -38,26 +38,54 @@ Python 3.10+. The core (LAN protocol, video, receive/send audio) needs only
 `requests`; the optional `talk` extra adds [PyAV](https://pyav.org) just for
 decoding arbitrary audio files for talk-back.
 
-## Local bootstrap (recommended)
+## Connect through the installer UI (recommended)
 
-If the panel's installer web UI is enabled, bootstrap directly from its local
-configuration backup:
+The recommended library entry point accepts the panel IP and installer
+password directly:
+
+```python
+from comelit import Intercom
+
+with Intercom.from_installer("192.168.55.4", "INSTALLER_PASSWORD") as panel:
+    panel.open_door()
+```
+
+On the first run this retrieves a persistent LAN token from the installer UI
+and caches it in `secrets.json`. Later calls for the same panel reuse the token
+without contacting the web UI. The password is never cached. Pass
+`ignore_cache=True` to force a fresh retrieval:
+
+```python
+Intercom.from_installer(
+    "192.168.55.4",
+    "INSTALLER_PASSWORD",
+    ignore_cache=True,
+)
+```
+
+If a cached token is rejected, it is refreshed automatically when a password
+was supplied. You may omit the password when you know a matching token is
+already cached.
+
+For scripts that already manage a token, bypass the cache entirely:
+
+```python
+with Intercom.from_token(
+    "192.168.55.4",
+    "0123456789abcdef0123456789abcdef",
+) as panel:
+    ...
+```
+
+The equivalent one-time CLI bootstrap remains available:
 
 ```bash
 comelit bootstrap-local 192.168.55.4
 ```
 
-This logs into port 8080, creates and downloads a configuration backup, extracts
-an active persistent ViP LAN token, and writes it with the panel address to
-`secrets.json`. If the panel contains several active users, select one with
-`--user-slot N` or `--description NAME`. No app traffic interception, account
-login, or cloud service is involved.
-
-The command prompts for the installer password without echoing it. You can also
-pass `--password`, though that may expose it in shell history and process lists.
-The password is used for this command only and is not saved. Configuration
-backups contain sensitive network and account data; the downloaded bytes are
-parsed in memory and are not retained.
+If the panel contains several active users, select one with `--user-slot N` or
+`--description NAME`. Configuration backups are parsed in memory and not
+retained.
 
 The secrets file is read from, in order: the path you pass explicitly, then
 `$COMELIT_SECRETS`, then `./secrets.json`, then `~/.config/comelit/secrets.json`.
@@ -68,7 +96,7 @@ If the cached token is revoked, rerun `bootstrap-local`.
 ```python
 from comelit import Intercom
 
-with Intercom.from_secrets() as panel:        # connects, authenticates, inits
+with Intercom.from_installer(IP, PASSWORD) as panel:
     panel.open_door()                          # buzz the entrance relay
 
     # live video → raw Annex-B H.264
@@ -115,9 +143,9 @@ comelit --secrets /path/to/secrets.json open-door   # explicit secrets path
 
 High-level:
 
-- **`Intercom`** — the facade. `Intercom.from_secrets(path=None)`, context
-  manager; `.open_door()`, `.rings()`, `.video(hd=...)`, `.source`, `.entrance`,
-  `.client` (the underlying `ViperClient`).
+- **`Intercom`** — the facade. Prefer `.from_installer(...)`; `.from_token(...)`
+  and `.from_secrets(...)` are also available. It provides `.open_door()`,
+  `.rings()`, `.video(hd=...)`, `.source`, `.entrance`, and `.client`.
 
 Low-level (for advanced use):
 

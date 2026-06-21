@@ -13,6 +13,7 @@ from comelit.web import PanelBackup, PanelUser
 class FakeClient:
     def __init__(self, authenticate_error=None):
         self.authenticate_error = authenticate_error
+
     def authenticate(self, token):
         if self.authenticate_error:
             raise self.authenticate_error
@@ -20,6 +21,25 @@ class FakeClient:
 
 
 class CredentialTests(unittest.TestCase):
+    def test_from_token_is_in_memory_and_carries_addresses(self):
+        credentials = ViperCredentials.from_token(
+            "http://192.0.2.9:8080/",
+            "a" * 32,
+            source_address="SB0001231",
+            entrance_address="SB100456",
+        )
+        self.assertIsNone(credentials.path)
+        self.assertEqual(
+            credentials.viper,
+            {
+                "panel_host": "192.0.2.9",
+                "panel_port": 64100,
+                "user_token": "a" * 32,
+                "source_address": "SB0001231",
+                "entrance_address": "SB100456",
+            },
+        )
+
     def test_bootstrap_local_creates_secrets_and_selects_user(self):
         class FakeWebClient:
             def __init__(self, host, password, *, port):
@@ -78,6 +98,109 @@ class CredentialTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(path.read_text())["viper"]["panel_host"], "192.0.2.8"
             )
+
+    def test_from_installer_reuses_matching_cached_token(self):
+        class FailingWebClient:
+            def __init__(self, *args, **kwargs):
+                raise AssertionError("web UI should not be used")
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "secrets.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "viper": {
+                            "panel_host": "192.0.2.5",
+                            "panel_port": 64100,
+                            "user_token": "cached",
+                        }
+                    }
+                )
+            )
+            credentials = ViperCredentials.from_installer(
+                "192.0.2.5",
+                "installer",
+                cache_path=path,
+                web_client_factory=FailingWebClient,
+            )
+            self.assertEqual(credentials.viper["user_token"], "cached")
+
+    def test_from_installer_refreshes_when_cache_is_ignored(self):
+        calls = []
+
+        class FakeWebClient:
+            def __init__(self, host, password, *, port):
+                calls.append((host, password, port))
+
+            def fetch_config(self):
+                return PanelBackup([PanelUser(3, "Fresh", "f" * 32)])
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "secrets.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "viper": {
+                            "panel_host": "192.0.2.5",
+                            "panel_port": 64100,
+                            "user_token": "cached",
+                        }
+                    }
+                )
+            )
+            credentials = ViperCredentials.from_installer(
+                "192.0.2.5",
+                "installer",
+                cache_path=path,
+                ignore_cache=True,
+                web_client_factory=FakeWebClient,
+            )
+            self.assertEqual(calls, [("192.0.2.5", "installer", 8080)])
+            self.assertEqual(credentials.viper["user_token"], "f" * 32)
+
+    def test_from_installer_requires_password_on_cache_miss(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "secrets.json"
+            with self.assertRaisesRegex(RuntimeError, "password is required"):
+                ViperCredentials.from_installer("192.0.2.5", cache_path=path)
+
+    def test_installer_credentials_refresh_rejected_cached_token(self):
+        calls = []
+
+        class FakeWebClient:
+            def __init__(self, host, password, *, port):
+                calls.append((host, password, port))
+
+            def fetch_config(self):
+                return PanelBackup([PanelUser(1, "Fresh", "f" * 32)])
+
+        class RejectCachedClient:
+            def authenticate(self, token):
+                if token == "cached":
+                    raise PermissionError("expired")
+                return {"response-code": 200, "token": token}
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "secrets.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "viper": {
+                            "panel_host": "192.0.2.5",
+                            "user_token": "cached",
+                        }
+                    }
+                )
+            )
+            credentials = ViperCredentials.from_installer(
+                "192.0.2.5",
+                "installer",
+                cache_path=path,
+                web_client_factory=FakeWebClient,
+            )
+            result = credentials.ensure_authenticated(RejectCachedClient())
+            self.assertEqual(result["token"], "f" * 32)
+            self.assertEqual(len(calls), 1)
 
     def test_connection_config_uses_cached_host(self):
         with tempfile.TemporaryDirectory() as directory:

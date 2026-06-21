@@ -49,6 +49,63 @@ class Intercom:
         from ``$COMELIT_SECRETS`` / ``./secrets.json`` / ``~/.config/comelit``)."""
         return cls(ViperCredentials(path), timeout=timeout)
 
+    @classmethod
+    def from_token(
+        cls,
+        panel_host: str,
+        user_token: str,
+        *,
+        panel_port: int = 64100,
+        source_address: str | None = None,
+        entrance_address: str | None = None,
+        timeout: float | None = 10.0,
+    ) -> "Intercom":
+        """Build an intercom from explicit in-memory LAN credentials."""
+        return cls(
+            ViperCredentials.from_token(
+                panel_host,
+                user_token,
+                panel_port=panel_port,
+                source_address=source_address,
+                entrance_address=entrance_address,
+            ),
+            timeout=timeout,
+        )
+
+    @classmethod
+    def from_installer(
+        cls,
+        panel_host: str,
+        installer_password: str | None = None,
+        *,
+        cache_path: str | Path | None = None,
+        ignore_cache: bool = False,
+        web_port: int = 8080,
+        panel_port: int = 64100,
+        user_slot: int | None = None,
+        description: str | None = None,
+        timeout: float | None = 10.0,
+    ) -> "Intercom":
+        """Build from the installer UI, reusing a matching cached LAN token.
+
+        The installer password is never persisted. Set ``ignore_cache=True`` to
+        force a fresh backup retrieval. A rejected cached token is refreshed
+        automatically when a password was supplied.
+        """
+        return cls(
+            ViperCredentials.from_installer(
+                panel_host,
+                installer_password,
+                cache_path=cache_path,
+                ignore_cache=ignore_cache,
+                web_port=web_port,
+                panel_port=panel_port,
+                user_slot=user_slot,
+                description=description,
+            ),
+            timeout=timeout,
+        )
+
     # --- addresses -------------------------------------------------------
     @property
     def source(self) -> str:

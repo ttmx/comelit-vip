@@ -74,6 +74,50 @@ class IntercomTests(unittest.TestCase):
             [("connect",), ("get_configuration", "none"), ("close",)],
         )
 
+    def test_from_token_builds_high_level_intercom_without_file(self):
+        patcher = patch("comelit.intercom.ViperClient", FakeClient)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        panel = Intercom.from_token(
+            "192.0.2.4",
+            "a" * 32,
+            source_address="SB0001231",
+            entrance_address="SB100456",
+            timeout=3,
+        )
+        self.assertEqual(panel.client.host, "192.0.2.4")
+        self.assertEqual(panel.source, "SB0001231")
+        self.assertEqual(panel.entrance, "SB100456")
+        self.assertIsNone(panel.credentials.path)
+
+    def test_from_installer_delegates_cache_options(self):
+        credentials = FakeCredentials({"panel_host": "192.0.2.5"})
+        with (
+            patch(
+                "comelit.intercom.ViperCredentials.from_installer",
+                return_value=credentials,
+            ) as factory,
+            patch("comelit.intercom.ViperClient", FakeClient),
+        ):
+            panel = Intercom.from_installer(
+                "192.0.2.5",
+                "installer",
+                cache_path="/tmp/cache.json",
+                ignore_cache=True,
+                user_slot=2,
+            )
+        self.assertEqual(panel.client.host, "192.0.2.5")
+        factory.assert_called_once_with(
+            "192.0.2.5",
+            "installer",
+            cache_path="/tmp/cache.json",
+            ignore_cache=True,
+            web_port=8080,
+            panel_port=64100,
+            user_slot=2,
+            description=None,
+        )
+
     def test_source_and_entrance_defaults(self):
         panel, _ = self.make_panel()
         self.assertEqual(panel.source, DEFAULT_SOURCE)
