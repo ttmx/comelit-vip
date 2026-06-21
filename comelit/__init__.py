@@ -11,16 +11,12 @@ Start with :class:`Intercom`, the high-level facade::
     with Intercom.from_secrets() as panel:
         panel.open_door()
 
-The lower-level building blocks (``Auth``, ``CcApi``, ``Provisioning`` for the
-cloud; ``ViperClient`` / ``VideoStream`` for the LAN protocol) remain available
-for advanced use.
+The lower-level ``ViperClient`` and ``VideoStream`` LAN protocol building
+blocks remain available for advanced use.
 """
 from . import g711
-from .api import CcApi, CcApiError
-from .auth import Auth
 from .credentials import ViperCredentials
 from .intercom import Intercom
-from .provision import Provisioning, VipConnection
 from .web import (
     PanelBackup,
     PanelUser,
@@ -49,11 +45,6 @@ __all__ = [
     "RtpPacket",
     "CtpPacket",
     "H264Depacketizer",
-    "Auth",
-    "CcApi",
-    "CcApiError",
-    "Provisioning",
-    "VipConnection",
     "PanelUser",
     "PanelBackup",
     "PanelWebClient",

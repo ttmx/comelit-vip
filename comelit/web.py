@@ -31,7 +31,6 @@ class PanelUser:
     description: str
     token: str
     email: str = ""
-    activation_code: str = ""
 
 
 @dataclass(frozen=True)
@@ -59,8 +58,7 @@ def parse_panel_backup(archive: bytes) -> PanelBackup:
 
     ``users.cfg`` is itself gzip-compressed inside the outer ``tar.gz``.
     Current firmware stores the description in field 6, the persistent LAN
-    token in field 9, the account email in field 11, and the activation code
-    in field 18.
+    token in field 9, and the account email in field 11.
     """
     try:
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
@@ -89,7 +87,6 @@ def parse_panel_backup(archive: bytes) -> PanelBackup:
                 description=fields.get(6, ""),
                 token=token.lower(),
                 email=fields.get(11, ""),
-                activation_code=fields.get(18, ""),
             )
         )
     if not users:

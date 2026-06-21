@@ -50,8 +50,8 @@ comelit bootstrap-local 192.168.55.4
 This logs into port 8080, creates and downloads a configuration backup, extracts
 an active persistent ViP LAN token, and writes it with the panel address to
 `secrets.json`. If the panel contains several active users, select one with
-`--user-slot N` or `--description NAME`. No app traffic interception or cloud
-OAuth credential is required.
+`--user-slot N` or `--description NAME`. No app traffic interception, account
+login, or cloud service is involved.
 
 The command prompts for the installer password without echoing it. You can also
 pass `--password`, though that may expose it in shell history and process lists.
@@ -59,41 +59,9 @@ The password is used for this command only and is not saved. Configuration
 backups contain sensitive network and account data; the downloaded bytes are
 parsed in memory and are not retained.
 
-## Cloud bootstrap (alternative)
-
-Everything keys off a single `secrets.json`. For cloud bootstrap, you need two
-values captured once from the app's OAuth login:
-
-```json
-{ "refresh_token": "…", "ownerAuthId": "…" }
-```
-
-See [`secrets.example.json`](secrets.example.json). On the **first run** the
-client uses these to talk to the Comelit cloud, discovers your panel (LAN
-address, ViP addresses, activation code), activates a persistent LAN token, and
-**writes all of it back into the same file**. After that, the live features run
-purely over the LAN and the cloud is no longer contacted.
-
-| key | required for cloud bootstrap | how it's obtained |
-|---|---|---|
-| `refresh_token` | yes (bootstrap) | captured from the app login; rotates and is re-saved automatically |
-| `ownerAuthId` | yes (bootstrap) | captured from the app login |
-| `ownerUuid` | optional | captured from the app login |
-| `viper.mac` | optional | auto-discovered (set it only if you have >1 device) |
-| `viper.panel_host` / `panel_port` | optional | auto-discovered (panel LAN IP) |
-| `viper.source_address` | optional | auto-discovered (this client's ViP address) |
-| `viper.entrance_address` | optional | the entrance-panel ViP address (target for door/video) |
-| `viper.activation_code`, `sub_address`, `user_token` | optional | auto-discovered/activated and persisted |
-
-### Getting `refresh_token` + `ownerAuthId`
-
-Full headless OAuth login isn't implemented yet. For now, capture the two
-bootstrap values once: run the Comelit app through an intercepting proxy
-(e.g. [mitmproxy](https://mitmproxy.org)) and read them from the OAuth token
-response and the cloud profile/data-store calls to `api.comelitgroup.com`.
-
 The secrets file is read from, in order: the path you pass explicitly, then
 `$COMELIT_SECRETS`, then `./secrets.json`, then `~/.config/comelit/secrets.json`.
+If the cached token is revoked, rerun `bootstrap-local`.
 
 ## Quick start (library)
 
@@ -153,13 +121,12 @@ High-level:
 
 Low-level (for advanced use):
 
-- **`ViperClient`** — the raw LAN ViP protocol: `authenticate`, `activate_user`,
+- **`ViperClient`** — the raw LAN ViP protocol: `authenticate`,
   `get_configuration`, `listen_rings`, `open_door`, `open_video_stream`.
 - **`VideoStream`** — a live call: `h264()`, `packets()`, `audio()`,
   `audio_packets()`, `enable_audio()`, `disable_audio()`, `send_audio_pcm()`.
-- **`Auth` / `CcApi` / `Provisioning`** — the cloud side (token refresh, the
-  `ccapi` envelope, device discovery via the JSON file store).
-- **`ViperCredentials`** — bootstrap/persist `secrets.json`.
+- **`PanelWebClient`** — retrieve LAN credentials from the installer UI.
+- **`ViperCredentials`** — bootstrap and persist the LAN-only `secrets.json`.
 - **`g711`** — the A-law (PCMA) codec used on the wire.
 
 See [`examples/`](examples) for runnable scripts of every feature.
@@ -180,8 +147,7 @@ committed lockfile is current and installs reproducibly.
 
 ## Scope & limitations
 
-- **LAN-direct only.** Cloud/P2P (remote) operation and a fully headless OAuth
-  login are not implemented (yet).
+- **LAN-direct only.** Cloud/P2P remote operation is intentionally out of scope.
 - Verified against an MSVF entrance panel; other ViP models may differ
   (e.g. supported video resolutions).
 

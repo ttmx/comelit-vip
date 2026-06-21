@@ -72,7 +72,6 @@ class BackupParserTests(unittest.TestCase):
         self.assertEqual(users[0].slot, 1)
         self.assertEqual(users[0].description, "Pixel 7")
         self.assertEqual(users[0].token, "0123456789abcdef0123456789abcdef")
-        self.assertEqual(users[0].activation_code, "abcdefgh12")
         config = parse_panel_backup(archive)
         self.assertEqual(config.apartment_address, "SB000123")
         self.assertEqual(config.entrance_address, "SB100456")

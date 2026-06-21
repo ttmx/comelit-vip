@@ -13,16 +13,10 @@ from comelit.web import PanelBackup, PanelUser
 class FakeClient:
     def __init__(self, authenticate_error=None):
         self.authenticate_error = authenticate_error
-        self.activated = None
-
     def authenticate(self, token):
         if self.authenticate_error:
             raise self.authenticate_error
         return {"response-code": 200, "token": token}
-
-    def activate_user(self, code, description):
-        self.activated = (code, description)
-        return "0123456789abcdef0123456789abcdef"
 
 
 class CredentialTests(unittest.TestCase):
@@ -34,8 +28,8 @@ class CredentialTests(unittest.TestCase):
             def fetch_config(self):
                 return PanelBackup(
                     [
-                        PanelUser(1, "Phone", "a" * 32, activation_code="code-one"),
-                        PanelUser(2, "Home", "b" * 32, activation_code="code-two"),
+                        PanelUser(1, "Phone", "a" * 32),
+                        PanelUser(2, "Home", "b" * 32),
                     ],
                     apartment_address="SB000123",
                     entrance_address="SB100456",
@@ -58,7 +52,6 @@ class CredentialTests(unittest.TestCase):
                     "panel_host": "192.0.2.5",
                     "panel_port": 64100,
                     "user_token": "b" * 32,
-                    "activation_code": "code-two",
                     "description": "Home",
                     "source_address": "SB0001232",
                     "entrance_address": "SB100456",
@@ -86,15 +79,21 @@ class CredentialTests(unittest.TestCase):
                 json.loads(path.read_text())["viper"]["panel_host"], "192.0.2.8"
             )
 
-    def test_connection_config_does_not_call_cloud_when_present(self):
+    def test_connection_config_uses_cached_host(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "secrets.json"
             path.write_text(json.dumps({"viper": {"panel_host": "192.0.2.1"}}))
             credentials = ViperCredentials(path)
-            credentials._load_provisioning = lambda: self.fail("unexpected cloud call")
             self.assertEqual(
                 credentials.ensure_connection_config()["panel_host"], "192.0.2.1"
             )
+
+    def test_connection_config_requires_local_bootstrap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "secrets.json"
+            path.write_text("{}")
+            with self.assertRaisesRegex(RuntimeError, "bootstrap-local"):
+                ViperCredentials(path).ensure_connection_config()
 
     def test_uses_existing_token_without_activation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -104,27 +103,20 @@ class CredentialTests(unittest.TestCase):
             client = FakeClient()
             result = credentials.ensure_authenticated(client)
             self.assertEqual(result["token"], "existing")
-            self.assertIsNone(client.activated)
 
-    def test_activates_and_persists_missing_token(self):
+    def test_missing_token_requires_local_bootstrap(self):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / "secrets.json"
-            path.write_text(
-                json.dumps(
-                    {
-                        "viper": {
-                            "activation_code": "cloud-code",
-                            "description": "Test client",
-                        }
-                    }
-                )
-            )
+            path.write_text(json.dumps({"viper": {}}))
             credentials = ViperCredentials(path)
-            client = FakeClient()
-            result = credentials.ensure_authenticated(client)
-            self.assertTrue(result["activated"])
-            self.assertEqual(client.activated, ("cloud-code", "Test client"))
-            saved = json.loads(path.read_text())
-            self.assertEqual(
-                saved["viper"]["user_token"], "0123456789abcdef0123456789abcdef"
-            )
+            with self.assertRaisesRegex(RuntimeError, "bootstrap-local"):
+                credentials.ensure_authenticated(FakeClient())
+
+    def test_rejected_token_requires_local_bootstrap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / "secrets.json"
+            path.write_text(json.dumps({"viper": {"user_token": "expired"}}))
+            credentials = ViperCredentials(path)
+            client = FakeClient(PermissionError("rejected"))
+            with self.assertRaisesRegex(PermissionError, "bootstrap-local"):
+                credentials.ensure_authenticated(client)

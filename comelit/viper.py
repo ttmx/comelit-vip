@@ -378,42 +378,6 @@ class ViperClient:
         finally:
             self.close_channel(h)
 
-    def activate_user(self, activation_code: str, description: str = "Python client") -> str:
-        """Exchange an activation code for a persistent LAN ``user-token``.
-
-        Codes longer than six characters use the cloud-activation form shipped
-        by the app. The issued token is verified with an ``access`` request
-        before it is returned.
-        """
-        if not activation_code:
-            raise ValueError("activation code is required")
-        h = self.open_channel("UAUT")
-        try:
-            if len(activation_code) > 6:
-                response = self.request(
-                    h,
-                    "user-cloud-activation",
-                    **{
-                        "cloud-activation-code": activation_code,
-                        "description": description,
-                    },
-                )
-            else:
-                response = self.request(
-                    h, "user-activation", **{"activation-code": activation_code}
-                )
-            if response.get("response-code") != 200:
-                raise PermissionError(f"activation failed: {response}")
-            token = response.get("user-token")
-            if not isinstance(token, str) or not token:
-                raise RuntimeError(f"activation response has no user-token: {response}")
-            verified = self.request(h, "access", **{"user-token": token})
-            if verified.get("response-code") != 200:
-                raise PermissionError(f"issued token verification failed: {verified}")
-            return token
-        finally:
-            self.close_channel(h)
-
     def get_configuration(self, addressbooks: str = "none") -> dict:
         """Initialize the ViP session and return the panel configuration."""
         h = self.open_channel("UCFG")

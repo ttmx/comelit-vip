@@ -3,15 +3,11 @@ from __future__ import annotations
 
 import json
 import os
-import socket
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
 from ._paths import default_secrets_path
-from .api import CcApi
-from .auth import Auth
-from .provision import Provisioning
 from .viper import ViperClient
 from .web import DEFAULT_VIPER_PORT, PanelUser, PanelWebClient
 
@@ -66,8 +62,6 @@ class ViperCredentials:
                 "user_token": selected.token,
             }
         )
-        if selected.activation_code:
-            self.viper["activation_code"] = selected.activation_code
         if selected.description:
             self.viper["description"] = selected.description
         if backup.apartment_address:
@@ -78,62 +72,29 @@ class ViperCredentials:
         return selected
 
     def ensure_connection_config(self) -> dict:
-        """Populate the panel address and activation metadata from the cloud."""
+        """Return cached LAN configuration or require local bootstrap."""
         if not self.viper.get("panel_host"):
-            self._load_provisioning()
+            raise RuntimeError(
+                f"no LAN configuration in {self.path}; "
+                "run `comelit bootstrap-local PANEL_IP`"
+            )
         return self.viper
 
     def ensure_authenticated(self, client: ViperClient) -> dict:
-        """Authenticate with a stored token, or activate and persist a new one."""
+        """Authenticate with the cached LAN token."""
         token = self.viper.get("user_token")
-        if token:
-            try:
-                return client.authenticate(token)
-            except PermissionError:
-                # A revoked token can be recovered from the account's activation blob.
-                pass
-
-        activation_code = self.viper.get("activation_code")
-        if not activation_code:
-            self._load_provisioning()
-            activation_code = self.viper.get("activation_code")
-        if not activation_code:
-            raise RuntimeError("cloud provisioning contains no ViP activation code")
-
-        token = client.activate_user(
-            activation_code,
-            self.viper.get("description") or f"Python {socket.gethostname()}",
-        )
-        self.viper["user_token"] = token
-        self._save()
-        return {"response-code": 200, "response-string": "Access Granted", "activated": True}
-
-    def _load_provisioning(self):
-        auth = Auth(self.path)
-        provisioning = Provisioning(CcApi(auth), auth.owner_auth_id)
-        mac = self.viper.get("mac")
-        if not mac:
-            macs = provisioning.discover_macs()
-            if len(macs) != 1:
-                raise RuntimeError(f"select viper.mac; discovered devices: {macs}")
-            mac = macs[0]
-
-        sub_address = self.viper.get("sub_address")
-        connection = provisioning.connection(mac, sub_address)
-        self.viper.update(
-            {
-                "mac": mac,
-                "panel_host": connection.local_address,
-                "panel_port": connection.local_tcp_port,
-                "activation_code": connection.activation_code,
-                "sub_address": connection.sub_address,
-            }
-        )
-        if connection.mqtt_topic_base:
-            apartment = connection.mqtt_topic_base.split("/")[-2]
-            self.viper.setdefault("my_address", apartment)
-            self.viper.setdefault("source_address", f"{apartment}{connection.sub_address}")
-        self._save()
+        if not token:
+            raise RuntimeError(
+                f"no LAN token in {self.path}; "
+                "run `comelit bootstrap-local PANEL_IP`"
+            )
+        try:
+            return client.authenticate(token)
+        except PermissionError as exc:
+            raise PermissionError(
+                "cached LAN token was rejected; rerun "
+                "`comelit bootstrap-local PANEL_IP`"
+            ) from exc
 
     def _save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)

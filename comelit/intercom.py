@@ -2,8 +2,8 @@
 
 ``Intercom`` owns the whole session lifecycle — load credentials, open the TCP
 connection, authenticate, and initialise the ViP configuration — so callers
-don't repeat that boilerplate. Credentials can be bootstrapped from the panel's
-local installer UI or, alternatively, through Comelit cloud provisioning.
+don't repeat that boilerplate. Credentials are bootstrapped from the panel's
+local installer UI.
 The low-level :class:`~comelit.viper.ViperClient` is still reachable as
 ``intercom.client`` for anything the facade doesn't wrap.
 
