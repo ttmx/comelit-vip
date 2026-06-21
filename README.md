@@ -130,6 +130,8 @@ Low-level (for advanced use):
 - **`g711`** — the A-law (PCMA) codec used on the wire.
 
 See [`examples/`](examples) for runnable scripts of every feature.
+For the smallest complete video example, start with
+[`examples/basic_video.py`](examples/basic_video.py).
 
 ## Development
 
