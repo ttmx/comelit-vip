@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Reject tracked credentials and captures
+        run: |
+          tracked="$(git ls-files -- '*.har' '[0-9]*.tar.gz' 'secrets*.json' |
+            grep -v '^secrets.example.json$' || true)"
+          test -z "$tracked"
+      - run: uv lock --check
+      - run: uv sync --locked
+      - run: uv run python -m unittest discover -s tests -v
+      - run: uv build

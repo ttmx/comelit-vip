@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@v6
+      - name: Reject tracked credentials and captures
+        run: |
+          tracked="$(git ls-files -- '*.har' '[0-9]*.tar.gz' 'secrets*.json' |
+            grep -v '^secrets.example.json$' || true)"
+          test -z "$tracked"
+      - run: uv sync --locked
+      - name: Verify tag matches package version
+        run: |
+          version="$(uv run python -c 'import comelit; print(comelit.__version__)')"
+          test "$GITHUB_REF_NAME" = "v$version"
+      - run: uv run python -m unittest discover -s tests -v
+      - run: uv build
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes

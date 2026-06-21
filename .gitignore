@@ -1,0 +1,26 @@
+# Credentials / runtime state — NEVER commit these
+secrets.json
+secrets.json.bak*
+secrets.*.json
+!secrets.example.json
+*.har
+[0-9]*.tar.gz
+
+# Virtualenvs
+.venv/
+venv/
+
+# Python build / cache artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+
+# Captured media
+*.h264
+*.wav
+*.mp4
+*.mp3
